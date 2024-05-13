@@ -1,3 +1,9 @@
+/*
+ * Copyright(c) 2021-2024 All rights reserved by Heekuck Oh.
+ * 이 프로그램은 한양대학교 ERICA 컴퓨터학부 학생을 위한 교육용으로 제작되었다.
+ * 한양대학교 ERICA 학생이 아닌 이는 프로그램을 수정하거나 배포할 수 없다.
+ * 프로그램을 수정할 경우 날짜, 학과, 학번, 이름, 수정 내용을 기록한다.
+ */
 #include <stdio.h>
 #include <stdbool.h>
 #include <unistd.h>
@@ -16,19 +22,8 @@ char *color[N+1] = {"\e[0;30m","\e[0;31m","\e[0;32m","\e[0;33m","\e[0;34m","\e[0
  * waiting[i]는 스레드 i가 임계구역에 들어가기 위해 기다리고 있음을 나타낸다.
  * alive 값이 false가 될 때까지 스레드 내의 루프가 무한히 반복된다.
  */
-bool waiting[N] = {false};  // 각 스레드의 대기 상태 배열
-volatile bool lock = false;
+bool waiting[N];
 bool alive = true;
-
-void spin_lock(volatile bool *lock) {
-    while (__sync_lock_test_and_set(lock, 1)) {
-        // 스핀락 대기
-    }
-}
-
-void spin_unlock(volatile bool *lock) {
-    *lock = false;
-}
 
 /*
  * N 개의 스레드가 임계구역에 배타적으로 들어가기 위해 스핀락을 사용하여 동기화한다.
@@ -36,18 +31,8 @@ void spin_unlock(volatile bool *lock) {
 void *worker(void *arg)
 {
     int i = *(int *)arg;
-
+    
     while (alive) {
-        waiting[i] = true; // 대기 상태 진입
-
-        // 다른 스레드가 임계구역에 진입하는 동안 기다림
-        while (waiting[i] && lock);
-
-        spin_lock(&lock);
-
-        // 대기 상태 해제
-        waiting[i] = false;
-
         /*
          * 임계구역: 알파벳 문자를 한 줄에 40개씩 10줄 출력한다.
          */
@@ -59,7 +44,6 @@ void *worker(void *arg)
         /*
          * 임계구역이 성공적으로 종료되었다.
          */
-        spin_unlock(&lock);
     }
     pthread_exit(NULL);
 }
