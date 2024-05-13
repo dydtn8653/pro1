@@ -24,6 +24,7 @@ char *color[N+1] = {"\e[0;30m","\e[0;31m","\e[0;32m","\e[0;33m","\e[0;34m","\e[0
  */
 volatile bool lock = false;
 bool alive = true;
+int current_thread = 0; // 현재 실행중인 스레드의 인덱스
 
 void spin_lock(volatile bool *lock) {
     while (__sync_lock_test_and_set(lock, 1)) {
@@ -43,11 +44,17 @@ void *worker(void *arg)
     int i = *(int *)arg;
 
     while (alive) {
+        // 라운드 로빈 스케줄링을 통해 스레드 실행 순서 조절
+        if (current_thread != i) {
+            usleep(1); // 다음 스레드를 기다림
+            continue;
+        }
+
         spin_lock(&lock);
         /*
          * 임계구역: 알파벳 문자를 한 줄에 40개씩 10줄 출력한다.
          */
-for (int k = 0; k < 400; ++k) {
+        for (int k = 0; k < 400; ++k) {
             printf("%s%c%s", color[i], 'A'+i, color[N]);
             if ((k+1) % 40 == 0)
                 printf("\n");
@@ -56,6 +63,9 @@ for (int k = 0; k < 400; ++k) {
          * 임계구역이 성공적으로 종료되었다.
          */
         spin_unlock(&lock);
+        
+        // 다음 스레드를 위해 current_thread를 업데이트
+        current_thread = (current_thread + 1) % N;
     }
     pthread_exit(NULL);
 }
@@ -72,20 +82,24 @@ int main(void)
         id[i] = i;
         pthread_create(tid+i, NULL, worker, id+i);
     }
-/*
+
+    /*
      * 스레드가 출력하는 동안 RUNTIME 마이크로초 쉰다.
      * 이 시간으로 스레드의 출력량을 조절한다.
      */
     usleep(RUNTIME);
+    
     /*
      * 스레드가 자연스럽게 무한 루프를 빠져나올 수 있게 한다.
      */
     alive = false;
+    
     /*
      * 자식 스레드가 종료될 때까지 기다린다.
      */
     for (i = 0; i < N; ++i)
         pthread_join(tid[i], NULL);
+    
     /*
      * 메인함수를 종료한다.
      */
