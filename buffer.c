@@ -3,6 +3,7 @@
 런타임을 1000000으로 했을때는 오류가 무조건 발생함
 미소비 되었다고 버퍼문제인가? 로그배열 문제인가?
 */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -107,49 +108,65 @@ void *consumer(void *arg) {
     pthread_exit(NULL);
 }
 
-int main(void) {
-    pthread_t tid[N];  // 스레드 ID 배열
+int main(void)
+{
+    pthread_t tid[N];
     int i, id[N];
 
-    // 작업 로그 배열 초기화
+    /*
+     * 생산자와 소비자를 기록하기 위한 logs 배열을 초기화한다.
+     */
     for (i = 0; i < MAX; ++i)
         task_log[i][0] = task_log[i][1] = -1;
-
-    // 소비자 스레드 생성
+    /*
+     * N/2 개의 소비자 스레드를 생성한다.
+     */
     for (i = 0; i < N/2; ++i) {
         id[i] = i;
         pthread_create(tid+i, NULL, consumer, id+i);
     }
-
-    // 생산자 스레드 생성
+    /*
+     * N/2 개의 생산자 스레드를 생성한다.
+     */
     for (i = N/2; i < N; ++i) {
         id[i] = i;
         pthread_create(tid+i, NULL, producer, id+i);
     }
-
-    usleep(RUNTIME);  // 실행 시간 제한
-
-    alive = false;  // 쓰레드 실행 종료 요청
-
-    // 모든 스레드 종료 대기
+    /*
+     * 스레드가 출력하는 동안 RUNTIME 마이크로초 쉰다.
+     * 이 시간으로 스레드의 출력량을 조절한다.
+     */
+    usleep(RUNTIME);
+    /*
+     * 스레드가 자연스럽게 무한 루프를 빠져나올 수 있게 한다.
+     */
+    alive = false;
+    /*
+     * 자식 스레드가 종료될 때까지 기다린다.
+     */
     for (i = 0; i < N; ++i)
         pthread_join(tid[i], NULL);
-
-    // 모든 아이템이 소비되었는지 확인
-    for (i = 0; i < MAX; ++i)
-        if (task_log[i][1] == -1 && task_log[i][0] != -1) {
+    /*
+     * 생산된 아이템을 건너뛰지 않고 소비했는지 검증한다.
+     */
+    for (i = 0; i < consumed; ++i)
+        if (task_log[i][1] == -1) {
             printf("....ERROR: 아이템 %d 미소비\n", i);
             return 1;
         }
-
-    // 생산된 아이템 수와 소비된 아이템 수 일치 여부 확인
-    if (produced == consumed) {
+    /*
+     * 생산된 아이템의 개수와 소비된 아이템의 개수를 출력한다.
+     */
+    if (next_item == produced) {
         printf("Total %d items were produced.\n", produced);
         printf("Total %d items were consumed.\n", consumed);
-    } else {
+    }
+    else {
         printf("....ERROR: 생산량 불일치\n");
         return 1;
     }
-
+    /*
+     * 메인함수를 종료한다.
+     */
     return 0;
 }
