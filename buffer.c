@@ -4,7 +4,10 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <stdatomic.h>
-
+/*런타임이 작을때는 어쩔때는 좋게 결과가 나오는데 
+런타임을 1000000으로 했을때는 오류가 무조건 발생함
+미소비 되었다고 뜸 그리고 출력했을때 생산자가 2개씩 뜸
+*/
 #define N 8
 #define MAX 10240
 #define BUFSIZE 4
