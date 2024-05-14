@@ -25,6 +25,7 @@ char *color[N+1] = {"\e[0;30m","\e[0;31m","\e[0;32m","\e[0;33m","\e[0;34m","\e[0
 volatile bool lock = false;
 bool alive = true;
 int current_thread = 0; // 현재 실행중인 스레드의 인덱스
+bool waiting[N] = {false}; // 각 스레드의 대기 상태 배열
 
 void spin_lock(volatile bool *lock) {
     while (__sync_lock_test_and_set(lock, 1)) {
@@ -45,7 +46,8 @@ void *worker(void *arg)
 
     while (alive) {
         // 라운드 로빈 스케줄링을 통해 스레드 실행 순서 조절
-        if (current_thread != i) {
+        if (!waiting[i]) {
+            waiting[i] = true; // 대기 상태로 전환
             usleep(1); // 다음 스레드를 기다림
             continue;
         }
@@ -66,6 +68,7 @@ void *worker(void *arg)
         
         // 다음 스레드를 위해 current_thread를 업데이트
         current_thread = (current_thread + 1) % N;
+        waiting[i] = false; // 대기 상태 해제
     }
     pthread_exit(NULL);
 }
