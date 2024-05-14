@@ -1,8 +1,14 @@
 
-/*런타임이 작을때는 좋게 결과가 나오는데 
+/*
+런타임이 작을때는 좋게 결과가 나오는데 
 런타임을 1000000으로 했을때는 오류
 생산아이템과 소비 아이템의 수가 맞지 않음
 내가 볼때 생산을 하고 종료가 되어서 그런것 같기도하고
+
+
+과제3은 pthread의 spinlock을 사용해서 해결하는 과제가 아닙니다. CAE 명령어를 사용해서 spinlock을 구현하고 (proj3.pdf 참조), 
+이를 두 문제에 응용하는 과제입니다. CAE 명령어를 이해하라고 과제를 준 것이기 때문에 pthread의 spinklock을 사용하면 결과물로 인정하지 않습니다.
+이게 뭔소린지;;
 */
 
 #include <stdio.h>
@@ -19,31 +25,34 @@
 #define RED "\e[0;31m"
 #define RESET "\e[0m"
 
-int buffer[BUFSIZE];
-int in = 0;
-int out = 0;
-_Atomic int counter = 0; // 아토믹 변수로 변경
-int next_item = 0;
+int buffer[BUFSIZE];         // 아이템을 담을 버퍼
+int in = 0;                   // 다음에 아이템을 삽입할 위치
+int out = 0;                  // 다음에 아이템을 꺼낼 위치
+_Atomic int counter = 0;      // 현재 버퍼에 있는 아이템의 수 (원자적 연산으로 보호)
+int next_item = 0;            // 다음에 생산될 아이템의 번호
 
-int task_log[MAX][2];
-int produced = 0;
-int consumed = 0;
+int task_log[MAX][2];         // 생산된 아이템과 소비된 아이템을 기록하기 위한 배열
+int produced = 0;             // 생산된 아이템의 수
+int consumed = 0;             // 소비된 아이템의 수
 
-bool alive = true;
+bool alive = true;            // 프로그램이 실행 중인지 여부를 나타내는 플래그
 
 #define UNLOCKED 0
 #define LOCKED 1
 
-volatile int lock = UNLOCKED;
+volatile int lock = UNLOCKED; // 스핀락을 위한 변수
 
+// 스핀락 획득 함수
 void spin_lock(volatile int *lock) {
     while (__atomic_test_and_set(lock, __ATOMIC_ACQUIRE)) {}
 }
 
+// 스핀락 해제 함수
 void spin_unlock(volatile int *lock) {
     __atomic_clear(lock, __ATOMIC_RELEASE);
 }
 
+// 생산자 스레드 함수
 void *producer(void *arg)
 {
     int i = *(int *)arg;
@@ -66,6 +75,7 @@ void *producer(void *arg)
         // 카운터 증가
         counter++;
         
+        // 아이템을 기록하고 생산된 아이템 수 증가
         if (task_log[item][0] == -1) {
             task_log[item][0] = i;
             produced++;
@@ -85,11 +95,13 @@ void *producer(void *arg)
     pthread_exit(NULL);
 }
 
+// 소비자 스레드 함수
 void *consumer(void *arg)
 {
     int i = *(int *)arg;
     int item;
     
+    // 버퍼가 비어있지 않거나 모든 생산이 완료될 때까지 실행
     while (alive || counter > 0 || next_item != produced) {
         spin_lock(&lock); // 스핀락 획득
         
@@ -112,6 +124,7 @@ void *consumer(void *arg)
         // 카운터 감소
         counter--;
         
+        // 아이템을 기록하고 소비된 아이템 수 증가
         if (task_log[item][0] == -1) {
             printf(RED"<C%d,%d>"RESET"....ERROR: 아이템 %d 미생산\n", i, item, item);
             spin_unlock(&lock); // 스핀락 해제
@@ -138,53 +151,43 @@ void *consumer(void *arg)
 
 int main(void)
 {
-    pthread_t tid[N];
-    int i, id[N];
+    pthread_t tid[N];   // 스레드 식별자 배열
+    int i, id[N];       // 스레드 식별자와 인덱스를 저장하는 변수
 
-    /*
-     * 생산자와 소비자를 기록하기 위한 logs 배열을 초기화한다.
-     */
+    // 생산된 아이템과 소비된 아이템을 기록하는 배열 초기화
     for (i = 0; i < MAX; ++i)
         task_log[i][0] = task_log[i][1] = -1;
-    /*
-     * N/2 개의 소비자 스레드를 생성한다.
-     */
+    
+    // N/2 개의 소비자 스레드 생성
     for (i = 0; i < N/2; ++i) {
         id[i] = i;
         pthread_create(tid+i, NULL, consumer, id+i);
     }
-    /*
-     * N/2 개의 생산자 스레드를 생성한다.
-     */
+    
+    // N/2 개의 생산자 스레드 생성
     for (i = N/2; i < N; ++i) {
         id[i] = i;
         pthread_create(tid+i, NULL, producer, id+i);
     }
-    /*
-     * 스레드가 출력하는 동안 RUNTIME 마이크로초 쉰다.
-     * 이 시간으로 스레드의 출력량을 조절한다.
-     */
+    
+    // 일정 시간 동안 스레드가 출력하도록 지연
     usleep(RUNTIME);
-    /*
-     * 스레드가 자연스럽게 무한 루프를 빠져나올 수 있게 한다.
-     */
+    
+    // 프로그램 종료를 위해 alive 플래그 변경
     alive = false;
-    /*
-     * 자식 스레드가 종료될 때까지 기다린다.
-     */
+    
+    // 모든 스레드가 종료될 때까지 대기
     for (i = 0; i < N; ++i)
         pthread_join(tid[i], NULL);
-    /*
-     * 생산된 아이템을 건너뛰지 않고 소비했는지 검증한다.
-     */
+    
+    // 모든 아이템이 소비되었는지 검증
     for (i = 0; i < consumed; ++i)
         if (task_log[i][1] == -1) {
             printf("....ERROR: 아이템 %d 미소비\n", i);
             return 1;
         }
-    /*
-     * 생산된 아이템의 개수와 소비된 아이템의 개수를 출력한다.
-     */
+    
+    // 생산된 아이템의 수와 소비된 아이템의 수 출력
     if (next_item == produced) {
         printf("Total %d items were produced.\n", produced);
         printf("Total %d items were consumed.\n", consumed);
@@ -193,9 +196,7 @@ int main(void)
         printf("....ERROR: 생산량 불일치\n");
         return 1;
     }
-    /*
-     * 메인함수를 종료한다.
-     
-     */
+    
     return 0;
-}                   
+}
+
