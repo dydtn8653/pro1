@@ -28,7 +28,7 @@ int current_thread = 0; // 현재 실행중인 스레드의 인덱스
 bool waiting[N] = {false}; // 각 스레드의 대기 상태 배열
 
 void spin_lock(volatile bool *lock) {
-    while (__sync_lock_test_and_set(lock, 1)) {
+    while (__sync_lock_test_and_set(lock, true)) {
         // 스핀락 대기
     }
 }
