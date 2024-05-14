@@ -79,57 +79,30 @@ int main(void)
     int i, id[N];
 
     /*
-     * 생산자와 소비자를 기록하기 위한 logs 배열을 초기화한다.
+     * N 개의 자식 스레드를 생성한다.
      */
-    for (i = 0; i < MAX; ++i)
-        task_log[i][0] = task_log[i][1] = -1;
-    /*
-     * N/2 개의 소비자 스레드를 생성한다.
-     */
-    for (i = 0; i < N/2; ++i) {
+    for (i = 0; i < N; ++i) {
         id[i] = i;
-        pthread_create(tid+i, NULL, consumer, id+i);
+        pthread_create(tid+i, NULL, worker, id+i);
     }
-    /*
-     * N/2 개의 생산자 스레드를 생성한다.
-     */
-    for (i = N/2; i < N; ++i) {
-        id[i] = i;
-        pthread_create(tid+i, NULL, producer, id+i);
-    }
+
     /*
      * 스레드가 출력하는 동안 RUNTIME 마이크로초 쉰다.
      * 이 시간으로 스레드의 출력량을 조절한다.
      */
     usleep(RUNTIME);
+    
     /*
      * 스레드가 자연스럽게 무한 루프를 빠져나올 수 있게 한다.
      */
     alive = false;
+    
     /*
      * 자식 스레드가 종료될 때까지 기다린다.
      */
     for (i = 0; i < N; ++i)
         pthread_join(tid[i], NULL);
-    /*
-     * 생산된 아이템을 건너뛰지 않고 소비했는지 검증한다.
-     */
-    for (i = 0; i < consumed; ++i)
-        if (task_log[i][1] == -1) {
-            printf("....ERROR: 아이템 %d 미소비\n", i);
-            return 1;
-        }
-    /*
-     * 생산된 아이템의 개수와 소비된 아이템의 개수를 출력한다.
-     */
-    if (next_item == produced) {
-        printf("Total %d items were produced.\n", produced);
-        printf("Total %d items were consumed.\n", consumed);
-    }
-    else {
-        printf("....ERROR: 생산량 불일치\n");
-        return 1;
-    }
+    
     /*
      * 메인함수를 종료한다.
      */
