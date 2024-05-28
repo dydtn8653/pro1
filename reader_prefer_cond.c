@@ -363,6 +363,7 @@ char *img5[L5] = {
 
 
 
+
 // 프로그램이 실행 중인지 여부를 나타내는 플래그입니다.
 bool alive = true;
 
@@ -414,10 +415,12 @@ void *reader(void *arg)
          * End Critical Section
          */
 
-        // Reader가 Critical Section을 빠져나왔음을 나타냅니다.
         pthread_mutex_lock(&mutex);
-        activeReaders--; // Reader가 Critical Section을 빠져나옴을 나타냅니다.
-        pthread_cond_broadcast(&cond); // 다른 Reader가 진입할 수 있도록 깨웁니다.
+        activeReaders--;
+        if (activeReaders == 0) {
+            pthread_cond_signal(&cond); // 모든 Reader가 빠져나왔음을 알림
+            // 여기 수정했다고 표시
+        }
         pthread_mutex_unlock(&mutex);
     }
     pthread_exit(NULL);
@@ -497,7 +500,6 @@ void *writer(void *arg)
     }
     pthread_exit(NULL);
 }
-
 
 /*
  * 메인 함수는 NREAD 개의 reader 스레드를 생성하고, NWRITE 개의 writer 스레드를 생성한다.
