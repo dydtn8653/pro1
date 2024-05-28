@@ -356,20 +356,17 @@ char *img5[L5] = {
 };
 
 
-
-/*
- * alive 값이 true이면 각 스레드는 무한 루프를 돌며 반복해서 일을 하고,
- * alive 값이 false가 되면 무한 루프를 빠져나와 스레드를 자연스럽게 종료한다.
- */
+// alive 플래그가 true일 때 스레드는 계속 작업을 반복
 bool alive = true;
 
-/* Mutex and condition variables */
+// 뮤텍스와 조건 변수 정의
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
-int active_writers = 0;
-int waiting_writers = 0;
-int active_readers = 0;
+int active_writers = 0;    // 현재 작업 중인 writer 수
+int waiting_writers = 0;   // 대기 중인 writer 수
+int active_readers = 0;    // 현재 작업 중인 reader 수
 
+// Reader 스레드 함수
 void *reader(void *arg) {
     int id, i;
     id = *(int *)arg;
@@ -377,23 +374,25 @@ void *reader(void *arg) {
     while (alive) {
         pthread_mutex_lock(&mutex);
 
-        /* Wait until there are no active or waiting writers */
+        // writer가 작업 중이거나 대기 중일 때 기다림
         while (active_writers > 0 || waiting_writers > 0) {
             pthread_cond_wait(&cond, &mutex);
         }
 
+        // reader가 작업 중임을 표시
         active_readers++;
         pthread_mutex_unlock(&mutex);
 
-        /* Begin Critical Section */
+        // 임계 구역 시작
         printf("<");
         for (i = 0; i < L0; ++i)
             printf("%c", 'A' + id);
         printf(">");
-        /* End Critical Section */
+        // 임계 구역 끝
 
         pthread_mutex_lock(&mutex);
         active_readers--;
+        // 모든 reader가 작업을 마쳤을 때 조건 변수 브로드캐스트
         if (active_readers == 0) {
             pthread_cond_broadcast(&cond);
         }
@@ -402,6 +401,7 @@ void *reader(void *arg) {
     pthread_exit(NULL);
 }
 
+// Writer 스레드 함수
 void *writer(void *arg) {
     int id, i;
     struct timespec req;
@@ -412,7 +412,7 @@ void *writer(void *arg) {
         pthread_mutex_lock(&mutex);
         waiting_writers++;
 
-        /* Wait until no active readers or writers */
+        // 다른 reader나 writer가 작업 중일 때 기다림
         while (active_readers > 0 || active_writers > 0) {
             pthread_cond_wait(&cond, &mutex);
         }
@@ -421,7 +421,7 @@ void *writer(void *arg) {
         active_writers++;
         pthread_mutex_unlock(&mutex);
 
-        /* Begin Critical Section */
+        // 임계 구역 시작
         printf("\n");
         switch (id) {
             case 0:
@@ -447,13 +447,15 @@ void *writer(void *arg) {
             default:
                 ;
         }
-        /* End Critical Section */
+        // 임계 구역 끝
 
         pthread_mutex_lock(&mutex);
         active_writers--;
+        // 모든 writer가 작업을 마쳤을 때 조건 변수 브로드캐스트
         pthread_cond_broadcast(&cond);
         pthread_mutex_unlock(&mutex);
 
+        // 랜덤한 시간 동안 대기
         req.tv_sec = 0;
         req.tv_nsec = rand() % SLEEPTIME;
         nanosleep(&req, NULL);
@@ -461,6 +463,7 @@ void *writer(void *arg) {
     pthread_exit(NULL);
 }
 
+// 메인 함수
 int main(void) {
     int i;
     int rarg[NREAD], warg[NWRITE];
@@ -468,29 +471,35 @@ int main(void) {
     pthread_t wthid[NWRITE];
     struct timespec req;
 
+    // NREAD 개수만큼 reader 스레드 생성
     for (i = 0; i < NREAD; ++i) {
         rarg[i] = i;
-        if (pthread_create(rthid+i, NULL, reader, rarg+i) != 0) {
+        if (pthread_create(rthid + i, NULL, reader, rarg + i) != 0) {
             fprintf(stderr, "pthread_create error\n");
             return -1;
         }
     }
+
+    // NWRITE 개수만큼 writer 스레드 생성
     for (i = 0; i < NWRITE; ++i) {
         warg[i] = i;
-        if (pthread_create(wthid+i, NULL, writer, warg+i) != 0) {
+        if (pthread_create(wthid + i, NULL, writer, warg + i) != 0) {
             fprintf(stderr, "pthread_create error\n");
             return -1;
         }
     }
+
+    // RUNTIME 동안 스레드들이 작업하도록 대기
     req.tv_sec = 0;
     req.tv_nsec = RUNTIME;
     nanosleep(&req, NULL);
 
+    // 모든 스레드 종료
     alive = false;
     for (i = 0; i < NREAD; ++i)
         pthread_join(rthid[i], NULL);
     for (i = 0; i < NWRITE; ++i)
         pthread_join(wthid[i], NULL);
-    
+
     return 0;
 }
