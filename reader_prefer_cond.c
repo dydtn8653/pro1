@@ -446,7 +446,7 @@ void *writer(void *arg)
     while (alive) {
         // Writer는 Reader가 Critical Section에 없을 때만 진입합니다.
         pthread_mutex_lock(&mutex);
-        while (activeReaders > 0) {
+        while (activeReaders > 0 || writerInCriticalSection) {
             pthread_cond_wait(&cond, &mutex); // Reader가 Critical Section에 있으면 대기
         }
         writerInCriticalSection = true; // Writer가 Critical Section에 들어감을 나타냅니다.
