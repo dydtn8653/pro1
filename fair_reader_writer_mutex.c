@@ -356,54 +356,58 @@ char *img5[L5] = {
 
 
 bool alive = true;
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+int readers = 0;
+int waiting_writers = 0;
+bool writing = false;
 
-pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER; // 뮤텍스 락 초기화
-int readerCount = 0;                               // 현재 리더 스레드 수
-bool writerInProgress = false;                     // 작가 스레드가 크리티컬 섹션에 있는지 여부
-
-// 리더 스레드의 역할을 하는 함수
 void *reader(void *arg)
 {
     int id, i;
+
     id = *(int *)arg;
 
     while (alive) {
-        pthread_mutex_lock(&mutex); // 뮤텍스 락 획득
-        while (writerInProgress) {
-            pthread_mutex_unlock(&mutex); // 작가 스레드가 크리티컬 섹션에 있으면 뮤텍스 락 해제 후 대기
-            pthread_mutex_lock(&mutex);   // 작가 스레드가 빠져나올 때까지 다시 뮤텍스 락 획득
+        pthread_mutex_lock(&mutex);
+        while (writing || waiting_writers > 0) {
+            pthread_mutex_unlock(&mutex);
+            sched_yield();
+            pthread_mutex_lock(&mutex);
         }
-        readerCount++; // 현재 리더 스레드 수 증가
-        pthread_mutex_unlock(&mutex); // 뮤텍스 락 해제
+        readers++;
+        pthread_mutex_unlock(&mutex);
 
         printf("<");
         for (i = 0; i < L0; ++i)
-            printf("%c", 'A'+id);
+            printf("%c", 'A' + id);
         printf(">");
 
-        pthread_mutex_lock(&mutex); // 뮤텍스 락 획득
-        readerCount--; // 현재 리더 스레드 수 감소
-        pthread_mutex_unlock(&mutex); // 뮤텍스 락 해제
+        pthread_mutex_lock(&mutex);
+        readers--;
+        pthread_mutex_unlock(&mutex);
     }
     pthread_exit(NULL);
 }
 
-// 작가 스레드의 역할을 하는 함수
 void *writer(void *arg)
 {
     int id, i;
     struct timespec req;
+
     id = *(int *)arg;
     srand(time(NULL));
 
     while (alive) {
-        pthread_mutex_lock(&mutex); // 뮤텍스 락 획득
-        while (readerCount > 0 || writerInProgress) {
-            pthread_mutex_unlock(&mutex); // 리더 스레드나 다른 작가 스레드가 크리티컬 섹션에 있으면 뮤텍스 락 해제 후 대기
-            pthread_mutex_lock(&mutex);   // 조건이 만족할 때까지 다시 뮤텍스 락 획득
+        pthread_mutex_lock(&mutex);
+        waiting_writers++;
+        while (readers > 0 || writing) {
+            pthread_mutex_unlock(&mutex);
+            sched_yield();
+            pthread_mutex_lock(&mutex);
         }
-        writerInProgress = true; // 작가 스레드가 크리티컬 섹션에 진입 중임을 표시
-        pthread_mutex_unlock(&mutex); // 뮤텍스 락 해제
+        waiting_writers--;
+        writing = true;
+        pthread_mutex_unlock(&mutex);
 
         printf("\n");
         switch (id) {
@@ -431,9 +435,9 @@ void *writer(void *arg)
                 ;
         }
 
-        pthread_mutex_lock(&mutex); // 뮤텍스 락 획득
-        writerInProgress = false; // 작가 스레드가 크리티컬 섹션을 빠져나옴
-        pthread_mutex_unlock(&mutex); // 뮤텍스 락 해제
+        pthread_mutex_lock(&mutex);
+        writing = false;
+        pthread_mutex_unlock(&mutex);
 
         req.tv_sec = 0;
         req.tv_nsec = rand() % SLEEPTIME;
