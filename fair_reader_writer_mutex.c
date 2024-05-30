@@ -357,58 +357,57 @@ char *img5[L5] = {
 
 bool alive = true;
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-int readers = 0;
-int waiting_writers = 0;
+int readers_waiting = 0;
 bool writing = false;
 
-void *reader(void *arg)
-{
+void *reader(void *arg) {
     int id, i;
-
     id = *(int *)arg;
 
     while (alive) {
         pthread_mutex_lock(&mutex);
-        while (writing || waiting_writers > 0) {
+        while (writing || readers_waiting > 0) {
             pthread_mutex_unlock(&mutex);
-            sched_yield();
+            sched_yield(); // 다른 스레드에게 실행 양보
             pthread_mutex_lock(&mutex);
         }
-        readers++;
+        readers_waiting++;
         pthread_mutex_unlock(&mutex);
 
+        // Reading Section
         printf("<");
         for (i = 0; i < L0; ++i)
-            printf("%c", 'A' + id);
+            printf("%c", 'A'+id);
         printf(">");
 
         pthread_mutex_lock(&mutex);
-        readers--;
+        readers_waiting--;
         pthread_mutex_unlock(&mutex);
+
+        struct timespec req;
+        req.tv_sec = 0;
+        req.tv_nsec = SLEEPTIME;
+        nanosleep(&req, NULL); // 잠깐 쉬어야 다른 스레드들도 작업할 수 있음
     }
+
     pthread_exit(NULL);
 }
 
-void *writer(void *arg)
-{
+void *writer(void *arg) {
     int id, i;
-    struct timespec req;
-
     id = *(int *)arg;
-    srand(time(NULL));
 
     while (alive) {
         pthread_mutex_lock(&mutex);
-        waiting_writers++;
-        while (readers > 0 || writing) {
+        while (writing || readers_waiting > 0) {
             pthread_mutex_unlock(&mutex);
-            sched_yield();
+            sched_yield(); // 다른 스레드에게 실행 양보
             pthread_mutex_lock(&mutex);
         }
-        waiting_writers--;
         writing = true;
         pthread_mutex_unlock(&mutex);
 
+        // Writing Section
         printf("\n");
         switch (id) {
             case 0:
@@ -439,10 +438,12 @@ void *writer(void *arg)
         writing = false;
         pthread_mutex_unlock(&mutex);
 
+        struct timespec req;
         req.tv_sec = 0;
-        req.tv_nsec = rand() % SLEEPTIME;
-        nanosleep(&req, NULL);
+        req.tv_nsec = SLEEPTIME;
+        nanosleep(&req, NULL); // 잠깐 쉬어야 다른 스레드들도 작업할 수 있음
     }
+
     pthread_exit(NULL);
 }
 
